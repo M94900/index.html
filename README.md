@@ -1,2 +1,2 @@
 # wc-staff-system
-staff-system for WHC
+index.html
