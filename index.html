@@ -217,6 +217,7 @@ body{background:var(--bg);color:var(--txt);font-family:"DM Sans",sans-serif;disp
   <div class="ni" onclick="nav('evaluate')" id="nav-evaluate"><span class="nico">📋</span>Evaluate</div>
   <div class="ni" onclick="nav('leaderboard')" id="nav-leaderboard"><span class="nico">🏆</span>Leaderboard</div>
   <div class="ni" onclick="nav('rewards')" id="nav-rewards"><span class="nico">🎁</span>Rewards</div>
+  <div class="ni" onclick="nav('archive')" id="nav-archive"><span class="nico">📦</span>Monthly Archive</div>
   <div class="ni" id="nav-managers" onclick="nav('managers')" style="display:none"><span class="nico">🔑</span>Managers</div>
   <div class="ni" id="nav-settings" onclick="nav('settings')"><span class="nico">⚙️</span>Settings</div>
   <div class="user-chip">
@@ -260,15 +261,16 @@ const CRIT={"Team Member":[{id:"cs",l:"Customer Service"},{id:"sp",l:"Speed & Ef
 const BADGES=[{id:"new",i:"🌱",n:"Newcomer",d:"First evaluation",ev:1},{id:"ris",i:"⭐",n:"Rising Star",d:"100+ points",pts:100},{id:"fir",i:"🔥",n:"On Fire",d:"300+ points",pts:300},{id:"dia",i:"💎",n:"Diamond",d:"600+ points",pts:600},{id:"leg",i:"👑",n:"Legend",d:"1000+ points",pts:1000},{id:"prf",i:"🎯",n:"Perfect Score",d:"80+ pts in one eval",sp:"perfect"},{id:"ded",i:"📋",n:"Dedicated",d:"5+ evaluations",ev:5},{id:"vet",i:"🛡️",n:"Veteran",d:"10+ evaluations",ev:10},{id:"eom",i:"🏆",n:"Employee of Month",d:"Won EOM award",sp:"eom"},{id:"grt",i:"🌟",n:"Service Star",d:"Google bonus 3+ times",sp:"grating"}];
 const REDEEM=[{pts:50,r:"100 SAR",i:"💰"},{pts:100,r:"Day Off",i:"🏖️"},{pts:150,r:"300 SAR",i:"💎"}];
 
-let S={brands:[],employees:[],evaluations:[],rewards:[],eom:[],managers:[],comments:[],nominations:[],settings:{bg:"#080810",acc:"#f5c842"},ui:{brand:0,branch:0,page:"dashboard",flt:{branch:"all",role:"all",q:""},lbTab:"all"}};
+let S={brands:[],employees:[],evaluations:[],rewards:[],eom:[],managers:[],comments:[],nominations:[],monthlyArchive:[],settings:{bg:"#080810",acc:"#f5c842"},ui:{brand:0,branch:0,page:"dashboard",flt:{branch:"all",role:"all",q:""},lbTab:"all"}};
 let EF={empId:null,scores:{},kpis:{att:false,grat:false,waste:false,speed:false},sales:0,behavior:0,bonus:0,note:""};
 let CLOUD={key:localStorage.getItem("wc_ck")||"",binId:localStorage.getItem("wc_bid")||"",syncing:false,err:false,lastSync:null,_t:null};
 let CU=null;
 
 async function save(){
-  const payload={brands:S.brands,employees:S.employees,evaluations:S.evaluations,rewards:S.rewards,eom:S.eom,managers:S.managers,comments:S.comments,nominations:S.nominations,settings:S.settings};
+  const payload={brands:S.brands,employees:S.employees,evaluations:S.evaluations,rewards:S.rewards,eom:S.eom,managers:S.managers,comments:S.comments,nominations:S.nominations,monthlyArchive:S.monthlyArchive||[],settings:S.settings};
   const p=JSON.stringify(payload);
-  try{if(window.storage)await window.storage.set("wc2",p);else localStorage.setItem("wc2",p);}catch(e){}
+  try{localStorage.setItem("wc2",p);}catch(e){}
+  try{if(window.storage)await window.storage.set("wc2",p);}catch(e){}
   if(CLOUD.key&&CLOUD.binId){
     clearTimeout(CLOUD._t);
     CLOUD._t=setTimeout(async()=>{
@@ -282,15 +284,34 @@ async function save(){
   }
 }
 async function load(){
+  // Load from local storage first
+  let local=null;
+  try{const r=localStorage.getItem("wc2");if(r)local=JSON.parse(r);}catch(e){}
+  try{if(!local&&window.storage){const x=await window.storage.get("wc2");if(x)local=JSON.parse(x.value);}}catch(e){}
+  // Try cloud
   const key=localStorage.getItem("wc_ck")||"";
   const bid=localStorage.getItem("wc_bid")||"";
   if(key&&bid){
     try{
-      const r=await fetch("https://api.jsonbin.io/v3/b/"+bid+"/latest",{headers:{"X-Master-Key":key},signal:AbortSignal.timeout(7000)});
-      if(r.ok){const d=await r.json();if(d.record)return d.record;}
+      const r=await fetch("https://api.jsonbin.io/v3/b/"+bid+"/latest",{headers:{"X-Master-Key":key},signal:AbortSignal.timeout(6000)});
+      if(r.ok){
+        const d=await r.json();
+        if(d.record){
+          const cloud=d.record;
+          // Use cloud only if it has MORE data than local (more employees/managers)
+          const ls=(local?.employees||[]).length+(local?.managers||[]).length+(local?.evaluations||[]).length;
+          const cs=(cloud.employees||[]).length+(cloud.managers||[]).length+(cloud.evaluations||[]).length;
+          if(cs>=ls){
+            // Cloud is better - save locally and return
+            try{localStorage.setItem("wc2",JSON.stringify(cloud));}catch(e){}
+            return cloud;
+          }
+        }
+      }
     }catch(e){}
   }
-  try{let r=null;if(window.storage){const x=await window.storage.get("wc2");if(x)r=x.value;}else r=localStorage.getItem("wc2");if(r)return JSON.parse(r);}catch(e){}
+  // Return local data
+  if(local)return local;
   return null;
 }
 function uid(){return "u"+Date.now()+Math.random().toString(36).slice(2,5);}
@@ -459,9 +480,83 @@ function applySt(){document.documentElement.style.setProperty("--bg",S.settings.
 function h2r(h){return parseInt(h.slice(1,3),16)+","+parseInt(h.slice(3,5),16)+","+parseInt(h.slice(5,7),16);}
 function dk(h){let r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);r=Math.max(0,r-60);g=Math.max(0,g-60);b=Math.max(0,b-60);return "#"+(r<16?"0":"")+r.toString(16)+(g<16?"0":"")+g.toString(16)+(b<16?"0":"")+b.toString(16);}
 
+// ── MONTHLY ARCHIVE ────────────────────────────────────────────────
+function openArchive(){
+  const b=cB();const emps=bEmps();
+  // Group rewards by month
+  const byMonth={};
+  S.rewards.filter(r=>emps.some(e=>e.id===r.empId)).forEach(r=>{
+    const m=r.date?r.date.slice(0,7):"Unknown";
+    if(!byMonth[m])byMonth[m]=[];
+    byMonth[m].push(r);
+  });
+  const months=Object.keys(byMonth).sort().reverse();
+  const monthsH=months.length?months.map(m=>{
+    const mrs=byMonth[m];
+    const total=mrs.reduce((a,r)=>a+(r.amount||0),0);
+    return `<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600">${m}</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--acc)">${total} SAR</span>
+          <span style="font-size:11px;color:var(--dim)">${mrs.length} rewards</span>
+        </div>
+      </div>
+      ${mrs.map(r=>{
+        const em=emps.find(e=>e.id===r.empId);
+        const ico=r.type==="eom"?"🏆":r.type==="team"?"👥":"⚡";
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bdr)">
+          <span style="font-size:15px">${ico}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500">${em?.name||"—"}</div>
+            <div style="font-size:10.5px;color:var(--dim)">${r.reason||""}</div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acc);flex-shrink:0">${r.amount} SAR</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }).join(""):
+  `<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No archived rewards yet</div>`;
+
+  const evalsByMonth={};
+  S.evaluations.filter(ev=>emps.some(e=>e.id===ev.empId)).forEach(ev=>{
+    const m=ev.date?ev.date.slice(0,7):"Unknown";
+    if(!evalsByMonth[m])evalsByMonth[m]=[];
+    evalsByMonth[m].push(ev);
+  });
+  const evalMonths=Object.keys(evalsByMonth).sort().reverse();
+  const evalsH=evalMonths.length?evalMonths.slice(0,6).map(m=>{
+    const evs=evalsByMonth[m];
+    const avg=Math.round(evs.reduce((a,e)=>a+e.pts,0)/evs.length);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr)">
+      <div style="font-size:13px">${m}</div>
+      <div style="display:flex;gap:12px">
+        <span style="font-size:11px;color:var(--dim)">${evs.length} evals</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acc)">Avg: ${avg} pts</span>
+      </div>
+    </div>`;
+  }).join(""):
+  `<div style="text-align:center;padding:14px;color:var(--dim);font-size:12px">No evaluation data</div>`;
+
+  openM(`<div class="mh"><div class="mt">📁 Monthly Archive</div><button class="xb" onclick="closeM()">✕</button></div>
+    <div class="tabs" style="margin-bottom:14px">
+      <button class="tab act" onclick="switchArchiveTab('rewards',this)">💰 Rewards</button>
+      <button class="tab" onclick="switchArchiveTab('evals',this)">📋 Evaluations</button>
+    </div>
+    <div id="arch-rewards">${monthsH}</div>
+    <div id="arch-evals" style="display:none">${evalsH}</div>`);
+}
+
+function switchArchiveTab(tab,btn){
+  document.querySelectorAll('#arch-rewards,#arch-evals').forEach(el=>el.style.display='none');
+  document.getElementById('arch-'+tab).style.display='block';
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('act'));
+  btn.classList.add('act');
+}
+
 async function init(){
   const d=await load();
-  if(d&&d.brands&&d.brands.length){S.brands=d.brands;S.employees=d.employees||[];S.evaluations=d.evaluations||[];S.rewards=d.rewards||[];S.eom=d.eom||[];S.managers=d.managers||[];S.comments=d.comments||[];S.nominations=d.nominations||[];S.settings=Object.assign(S.settings,d.settings||{});if(!S.managers.find(m=>m.id==="admin0"))S.managers.unshift({id:"admin0",name:"Administrator",username:"admin",password:"admin123",role:"admin"});}
+  if(d&&d.brands&&d.brands.length){S.brands=d.brands;S.employees=d.employees||[];S.evaluations=d.evaluations||[];S.rewards=d.rewards||[];S.eom=d.eom||[];S.managers=d.managers||[];S.comments=d.comments||[];S.nominations=d.nominations||[];S.monthlyArchive=d.monthlyArchive||[];S.settings=Object.assign(S.settings,d.settings||{});if(!S.managers.find(m=>m.id==="admin0"))S.managers.unshift({id:"admin0",name:"Administrator",username:"admin",password:"admin123",role:"admin"});}
   else seedData();
   applySt();
   const sess=sessionStorage.getItem("wc_cu");
@@ -481,7 +576,7 @@ function nav(page){
   S.ui.page=page;
   document.querySelectorAll(".ni").forEach(e=>e.classList.remove("act"));
   const n=document.getElementById("nav-"+page);if(n)n.classList.add("act");
-  const T={dashboard:"Dashboard",employees:"Employees",evaluate:"New Evaluation",leaderboard:"Leaderboard",rewards:"Rewards & Incentives",managers:"Branch Managers",settings:"Settings"};
+  const T={dashboard:"Dashboard",employees:"Employees",evaluate:"New Evaluation",leaderboard:"Leaderboard",rewards:"Rewards & Incentives",archive:"Monthly Archive",managers:"Branch Managers",settings:"Settings"};
   document.getElementById("pg-title").textContent=T[page]||page;
   render();
 }
@@ -493,6 +588,7 @@ function render(){
   else if(S.ui.page==="leaderboard")h=pgL();
   else if(S.ui.page==="rewards")h=pgR();
   else if(S.ui.page==="managers")h=pgMgr();
+  else if(S.ui.page==="archive")h=pgArchive();
   else if(S.ui.page==="settings")h=pgSt();
   document.getElementById("content").innerHTML='<div class="pg">'+h+'</div>';
   if(S.ui.page==="evaluate")aeR();
@@ -609,7 +705,7 @@ function pgR(){
   const rwH=rws.length?rws.map(r=>{const em=emps.find(e=>e.id===r.empId);const ico=r.type==="eom"?"🏆":r.type==="team"?"👥":"⚡";return`<div class="rwr"><div class="rwi">${ico}</div><div class="rwin"><div class="rwnm">${em?.name||"—"} <span class="rb r${RK[em?.role]||"TM"}">${em?.role||""}</span></div><div class="rwmt">${r.reason} · ${r.date}</div></div><div style="display:flex;align-items:center;gap:6px"><div class="rwam">${r.amount}SAR</div>${isAdmin()||isMgr()?`<button onclick="openEditReward('${r.id}')" style="background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.18);border-radius:5px;color:var(--acc);font-size:10px;padding:2px 7px;cursor:pointer;font-family:'DM Sans',sans-serif">✏️</button><button onclick="delRewardConfirm('${r.id}')" style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.18);border-radius:5px;color:var(--red);font-size:10px;padding:2px 7px;cursor:pointer;font-family:'DM Sans',sans-serif">🗑</button>`:""}</div></div>`;}).join(""):`<div class="empty" style="padding:20px"><div class="ei">🎁</div><div class="et">No rewards yet</div></div>`;
   const kpiG=[{i:"👥",k:"Full Attendance",v:"100–150 SAR"},{i:"⭐",k:"Google Rating ≥ 4.5",v:"100–200 SAR"},{i:"📉",k:"Waste Target",v:"200 SAR (team)"},{i:"⚡",k:"Speed Target",v:"100–200 SAR"},{i:"📈",k:"Sales Target",v:"2–5% of excess"},{i:"🏆",k:"Employee of Month",v:"200–500 SAR"},{i:"💡",k:"Instant Exceptional",v:"50–100 SAR"}];
   const kpiH=kpiG.map(k=>`<div class="rdr"><div style="display:flex;align-items:center;gap:7px"><span style="font-size:17px">${k.i}</span><span style="font-size:12px">${k.k}</span></div><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);font-weight:600">${k.v}</span></div>`).join("");
-  const btns=`<div style="display:flex;gap:6px;flex-wrap:wrap">${canEdit()?`<button class="btn bgn bsm" onclick="openAR()">⚡ Instant</button><button class="btn bp bsm" onclick="openEOM()">🏆 Award EOM</button>`:""}${(isMgr()||isAdmin())?`<button class="btn bnm bsm" onclick="openNominate()">🏅 Nominate</button>`:""}</div>`;
+  const btns=`<div style="display:flex;gap:6px;flex-wrap:wrap">${canEdit()?`<button class="btn bgn bsm" onclick="openAR()">⚡ Instant</button><button class="btn bp bsm" onclick="openEOM()">🏆 Award EOM</button>`:""}${(isMgr()||isAdmin())?`<button class="btn bnm bsm" onclick="openNominate()">🏅 Nominate</button>`:""} ${isAdmin()?`<button class="btn bg bsm" onclick="openArchive()">📁 Archive</button>`:"" }</div>`;
   return`<div class="sh"><div class="st">🎁 Rewards & Incentives</div>${btns}</div><div class="g3"><div class="sc"><div class="si">🎁</div><div class="sv">${S.rewards.filter(r=>emps.some(e=>e.id===r.empId)).length}</div><div class="sl">Total</div></div><div class="sc"><div class="si">💰</div><div class="sv">${S.rewards.filter(r=>emps.some(e=>e.id===r.empId)).reduce((a,r)=>a+(r.amount||0),0)}</div><div class="sl">SAR Awarded</div></div><div class="sc"><div class="si">🏅</div><div class="sv">${S.nominations.filter(n=>n.brandId===b.id&&n.month===tM()).length}</div><div class="sl">Nominations</div></div></div><div class="g2"><div><div class="sh" style="margin-bottom:7px"><div class="st" style="font-size:15px">Recent Rewards</div></div><div class="card">${rwH}</div></div><div><div class="sh" style="margin-bottom:7px"><div class="st" style="font-size:15px">Incentive Guide</div></div><div class="card" style="margin-bottom:10px">${kpiH}</div><div class="sh" style="margin-bottom:7px"><div class="st" style="font-size:15px">Points Redemption</div></div><div class="card">${REDEEM.map(r=>`<div class="rdr"><div style="display:flex;align-items:center;gap:7px"><span>${r.i}</span><span style="font-size:12px;font-weight:600">${r.pts}pts</span></div><span style="font-size:12px;color:var(--acc);font-weight:600">${r.r}</span></div>`).join("")}</div></div></div>`;
 }
 
@@ -1100,6 +1196,46 @@ function buildBranchRestrictions(){
   buildBSel();buildBPills();syncTB();updateBrandDisplay();render();
 }
 
+
+function pgArchive(){
+  const b=cB();
+  const archives=(S.monthlyArchive||[]).filter(a=>!a.brandId||a.brandId===b.id).slice().reverse();
+  const list=archives.map(a=>{
+    const rws=a.rewards||[];const eoms=a.eoms||[];const evs=a.evaluations||[];
+    const tot=rws.reduce((x,r)=>x+(r.amount||0),0);
+    return `<div style="background:var(--surf2);border:1px solid var(--bdr);border-radius:14px;margin-bottom:11px;overflow:hidden">
+      <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="var e=document.getElementById('ar${a.id}');if(e)e.style.display=e.style.display=='none'?'block':'none'">
+        <div style="display:flex;align-items:center;gap:12px"><span style="font-size:20px">📦</span>
+          <div><div style="font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600">${a.month} — ${a.brandName||b.name}</div>
+          <div style="font-size:11px;color:var(--dim)">${evs.length} evals · ${rws.length} rewards · ${eoms.length} EOM</div></div></div>
+        <div style="text-align:right"><div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--acc)">${tot} SAR</div>
+          <div style="font-size:10px;color:var(--dim)">total</div></div>
+      </div>
+      <div id="ar${a.id}" style="display:none;padding:0 18px 14px">
+        ${eoms.length?`<div style="margin-bottom:10px"><div class="lbl" style="margin-bottom:6px">EOM Awards</div>${eoms.map(e=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12.5px"><span>${e.empName||'—'} <span style="color:var(--dim);font-size:11px">${e.branchName||''}</span></span><span style="color:var(--acc)">${e.amount} SAR</span></div>`).join('')}</div>`:''}
+        ${rws.length?`<div style="margin-bottom:10px"><div class="lbl" style="margin-bottom:6px">Rewards</div>${rws.slice(0,8).map(r=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);font-size:12px"><span>${r.empName||'—'} <span style="color:var(--dim);font-size:10.5px">${r.reason||''}</span></span><span style="color:var(--acc)">${r.amount} SAR</span></div>`).join('')}${rws.length>8?`<div style="font-size:11px;color:var(--dim);padding-top:5px">+${rws.length-8} more</div>`:''}</div>`:''}
+        ${isAdmin()?`<button class="btn bd bsm" onclick="if(confirm('Delete this archive?')){S.monthlyArchive=S.monthlyArchive.filter(x=>x.id!=='${a.id}');save();render();}">🗑️ Delete Archive</button>`:''}
+      </div></div>`;
+  }).join('')||'<div class="empty"><div class="ei">📦</div><div class="et">No archived months yet</div><div style="font-size:12px;color:var(--dim);margin-top:6px">Press Archive This Month to save current month data</div></div>';
+  return `<div class="sh"><div class="st">📦 Monthly Archive</div>${isAdmin()?`<button class="btn bp" onclick="archiveNow()">📦 Archive This Month</button>`:''}</div>
+  <div style="background:rgba(245,200,66,.06);border:1px solid var(--bdr);border-radius:11px;padding:12px 16px;margin-bottom:14px;font-size:12.5px;color:var(--dim);line-height:1.8">
+    💡 Archive saves a permanent snapshot of this month — rewards, evaluations, and EOM. Data stays forever unless you delete it manually.
+  </div>${list}`;
+}
+function archiveNow(){
+  const b=cB();const month=tM();
+  if((S.monthlyArchive||[]).find(a=>a.month===month&&a.brandId===b.id)){toast("Already archived this month","err");return;}
+  const bEmpsAll=S.employees.filter(e=>e.brandId===b.id);
+  const rws=S.rewards.filter(r=>bEmpsAll.some(e=>e.id===r.empId)&&r.date&&r.date.startsWith(month))
+    .map(r=>{const em=S.employees.find(e=>e.id===r.empId);const br=b.branches.find(x=>x.id===em?.branchId);return{...r,empName:em?.name||'—',branchName:br?.name||''};});
+  const eoms=S.eom.filter(e=>e.brandId===b.id&&e.month===month)
+    .map(e=>{const em=S.employees.find(x=>x.id===e.empId);const br=b.branches.find(x=>x.id===e.branchId);return{...e,empName:em?.name||'—',branchName:br?.name||''};});
+  const evs=S.evaluations.filter(e=>bEmpsAll.some(x=>x.id===e.empId)&&e.date&&e.date.startsWith(month))
+    .map(e=>{const em=S.employees.find(x=>x.id===e.empId);return{...e,empName:em?.name||'—'};});
+  if(!S.monthlyArchive)S.monthlyArchive=[];
+  S.monthlyArchive.push({id:uid(),month,brandId:b.id,brandName:b.name,date:new Date().toISOString().split("T")[0],rewards:rws,eoms,evaluations:evs});
+  save();toast("✅ "+month+" archived!","ok");render();
+}
 init();
 // Try to fetch Google ratings on load (will work if CORS proxy allows)
 setTimeout(()=>tryFetchAllRatings(),2000);
