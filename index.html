@@ -173,10 +173,32 @@ body{background:var(--bg);color:var(--txt);font-family:"DM Sans",sans-serif;disp
     <div class="field"><label>Password</label><input id="li-pass" type="password" placeholder="Password"></div>
     <button class="btn bp" style="width:100%;margin-top:4px;justify-content:center" onclick="doLogin()">Sign In →</button>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--bdr);font-size:10.5px;color:var(--dim);text-align:center">Default: <span style="color:var(--acc)">admin / admin123</span></div>
-    <div style="margin-top:10px;text-align:center">
-      <button onclick="openLoginCloud()" style="background:none;border:1px solid var(--bdr);border-radius:8px;color:var(--dim);font-size:11px;padding:7px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;transition:all .2s" onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'" onmouseout="this.style.borderColor='var(--bdr)';this.style.color='var(--dim)'">
+    <div style="margin-top:10px">
+      <button onclick="toggleLoginCloud()" id="lc-toggle-btn" style="background:none;border:1px solid var(--bdr);border-radius:8px;color:var(--dim);font-size:11px;padding:7px 14px;cursor:pointer;font-family:'DM Sans',sans-serif;width:100%;transition:all .2s">
         <span id="login-cloud-status">☁️ Connect to Cloud Sync first</span>
       </button>
+      <!-- Inline cloud panel -->
+      <div id="lc-panel" style="display:none;margin-top:8px;background:var(--surf2);border:1px solid var(--bdr);border-radius:10px;padding:14px">
+        <div id="lc-connected-view" style="display:none">
+          <div style="font-size:11.5px;color:var(--dim);margin-bottom:10px;line-height:1.7">✅ متصل — اضغط Pull لتحميل آخر البيانات ثم سجّل دخولك</div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:8px;word-break:break-all">Bin ID: <span id="lc-bid-display" style="color:var(--acc);font-family:monospace"></span></div>
+          <button onclick="loginPull()" style="width:100%;background:var(--acc);color:#000;border:none;border-radius:8px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:6px">⬇️ Pull Latest Data</button>
+          <button onclick="loginDisconnect()" style="width:100%;background:none;border:1px solid var(--bdr);border-radius:8px;padding:6px;font-size:11px;color:var(--dim);cursor:pointer;font-family:'DM Sans',sans-serif">Disconnect</button>
+        </div>
+        <div id="lc-setup-view">
+          <div style="font-size:11.5px;color:var(--dim);margin-bottom:10px;line-height:1.7">أدخل بيانات الاتصال التي شاركها معك المدير العام:</div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Master API Key</div>
+            <input type="password" id="lc-key-input" placeholder="$2a$10$..." autocomplete="off" style="width:100%;background:var(--surf);border:1px solid var(--bdr);border-radius:7px;color:var(--txt);padding:7px 9px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none">
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Bin ID</div>
+            <input type="text" id="lc-bid-input" placeholder="مثال: 69f71486aaba8821976695d0" style="width:100%;background:var(--surf);border:1px solid var(--bdr);border-radius:7px;color:var(--txt);padding:7px 9px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none">
+          </div>
+          <div id="lc-msg" style="font-size:11px;color:var(--dim);text-align:center;margin-bottom:8px;min-height:16px"></div>
+          <button onclick="loginCloudConnect()" style="width:100%;background:var(--acc);color:#000;border:none;border-radius:8px;padding:9px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif">☁️ Connect & Load Data</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -297,42 +319,50 @@ function updateBrandDisplay(){
   document.getElementById("tb-brand-logo").innerHTML=brandLogoHTML(b.logoKey,30);
 }
 
-function openLoginCloud(){
+function toggleLoginCloud(){
+  const panel=document.getElementById("lc-panel");
   const connected=CLOUD.key&&CLOUD.binId;
-  openM(`<div class="mh"><div class="mt">☁️ Cloud Sync</div><button class="xb" onclick="closeM()">✕</button></div>
-    <div style="font-size:12.5px;color:var(--dim);margin-bottom:14px;line-height:1.8;background:rgba(245,200,66,.05);border:1px solid var(--bdr);border-radius:8px;padding:12px">
-      ${connected?
-        `✅ متصل — اضغط <strong style="color:var(--acc)">Pull Latest Data</strong> لتحميل آخر البيانات ثم سجّل دخولك`:
-        `للمدراء: أدخل بيانات الاتصال التي شاركها معك المدير العام`
-      }
-    </div>
-    ${!connected?`
-    <div class="field"><label>Master API Key</label>
-      <input type="password" id="lc-key" placeholder="$2a$10$..." autocomplete="off">
-    </div>
-    <div class="field"><label>Bin ID</label>
-      <input type="text" id="lc-bid" placeholder="مثال: 69f71486aaba8821976695d0" style="font-family:'JetBrains Mono',monospace;font-size:12px">
-    </div>
-    <button class="btn bp" onclick="loginCloudConnect()" style="width:100%;justify-content:center;margin-bottom:8px">☁️ Connect & Load Data</button>`:`
-    <div class="field"><label>Bin ID الحالي</label>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 10px;background:var(--surf2);border:1px solid var(--bdr);border-radius:8px;color:var(--acc)">${CLOUD.binId}</div>
-    </div>
-    <button class="btn bgn" onclick="closeM();forcePull()" style="width:100%;justify-content:center;margin-bottom:8px">⬇️ Pull Latest Data</button>
-    <button class="btn bg bsm" onclick="loginCloudDisconnect()" style="width:100%;justify-content:center">Disconnect</button>`}
-    <div id="lc-msg" style="font-size:11.5px;text-align:center;margin-top:8px;color:var(--dim)"></div>`);
+  if(!panel)return;
+  if(panel.style.display==="none"){
+    panel.style.display="block";
+    if(connected){
+      document.getElementById("lc-connected-view").style.display="block";
+      document.getElementById("lc-setup-view").style.display="none";
+      const bd=document.getElementById("lc-bid-display");
+      if(bd)bd.textContent=CLOUD.binId;
+    } else {
+      document.getElementById("lc-connected-view").style.display="none";
+      document.getElementById("lc-setup-view").style.display="block";
+    }
+  } else {
+    panel.style.display="none";
+  }
 }
-
-async function loginCloudConnect(){
-  const key=document.getElementById("lc-key")?.value.trim();
-  const bid=document.getElementById("lc-bid")?.value.trim();
+async function loginPull(){
   const msg=document.getElementById("lc-msg");
-  if(!key||!bid){if(msg)msg.textContent="Please enter both API Key and Bin ID";return;}
+  if(msg){msg.style.color="var(--acc)";msg.textContent="Pulling data…";}
+  await forcePull();
+  document.getElementById("lc-panel").style.display="none";
+  updateLoginCloudStatus();
+}
+function loginDisconnect(){
+  CLOUD.key="";CLOUD.binId="";
+  localStorage.removeItem("wc_ck");localStorage.removeItem("wc_bid");
+  document.getElementById("lc-panel").style.display="none";
+  updateLoginCloudStatus();
+  toast("Disconnected","ok");
+}
+async function loginCloudConnect(){
+  const key=document.getElementById("lc-key-input")?.value.trim();
+  const bid=document.getElementById("lc-bid-input")?.value.trim();
+  const msg=document.getElementById("lc-msg");
+  if(!key||!bid){if(msg){msg.style.color="var(--red)";msg.textContent="Please enter both fields";}return;}
   if(msg){msg.style.color="var(--acc)";msg.textContent="Connecting…";}
   try{
     const r=await fetch("https://api.jsonbin.io/v3/b/"+bid+"/latest",{
       headers:{"X-Master-Key":key},signal:AbortSignal.timeout(8000)
     });
-    if(!r.ok){if(msg){msg.style.color="var(--red)";msg.textContent="❌ Invalid Key or Bin ID — check with your admin";}return;}
+    if(!r.ok){if(msg){msg.style.color="var(--red)";msg.textContent="❌ Invalid Key or Bin ID";}return;}
     const d=await r.json();
     if(d.record){
       const cd=d.record;
@@ -348,9 +378,9 @@ async function loginCloudConnect(){
       applySt();
       if(msg){msg.style.color="var(--grn)";msg.textContent="✅ Connected! You can now sign in.";}
       updateLoginCloudStatus();
-      setTimeout(()=>closeM(),1200);
+      setTimeout(()=>{document.getElementById("lc-panel").style.display="none";},1500);
     }
-  }catch(e){if(msg){msg.style.color="var(--red)";msg.textContent="❌ Connection failed — check your internet";}}
+  }catch(e){if(msg){msg.style.color="var(--red)";msg.textContent="❌ Connection failed";}}
 }
 
 function loginCloudDisconnect(){
